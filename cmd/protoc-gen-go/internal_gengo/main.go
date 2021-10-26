@@ -16,13 +16,14 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ilisin/protobuf_extensions/extensions"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/internal/encoding/tag"
 	"google.golang.org/protobuf/internal/genid"
 	"google.golang.org/protobuf/internal/version"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/runtime/protoimpl"
-
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -401,7 +402,28 @@ func genMessageField(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo, fie
 	}
 	tags := structTags{
 		{"protobuf", fieldProtobufTagValue(field)},
-		{"json", fieldJSONTagValue(field)},
+	}
+	jsonTag := ""
+	if option := proto.GetExtension(field.Desc.Options(), extensions.E_JsonTag); option != nil {
+		if jTag, ok := option.(string); ok && jTag != "" {
+			jsonTag = jTag
+		}
+	}
+	if jsonTag != "" {
+		tags = append(tags, [2]string{"json", jsonTag})
+	} else {
+		tags = append(tags, [2]string{"json", fieldJSONTagValue(field)})
+	}
+	if option := proto.GetExtension(field.Desc.Options(), extensions.E_MoreTags); option != nil {
+		if strOpts, ok := option.(string); ok && strOpts != "" {
+			for _, tPaire := range strings.Split(strOpts, " ") {
+				if kvs := strings.SplitN(tPaire, ":", 2); len(kvs) == 2 && kvs[0] != "" {
+					if tagVal := strings.Trim(kvs[1], "\""); tagVal != "" {
+						tags = append(tags, [2]string{kvs[0], tagVal})
+					}
+				}
+			}
+		}
 	}
 	if field.Desc.IsMap() {
 		key := field.Message.Fields[0]
